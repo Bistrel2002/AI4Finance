@@ -58,4 +58,17 @@ exogenous_features:
     metrics: [funding_rate, fear_greed_value]
   social_sentiment:
     enabled: true
-    metrics: [google_trends_score, reddit_polarity, reddit_volume]
+    metrics:
+      - google_trends_score
+      - reddit_polarity_0h
+      - reddit_volume_0h
+      - reddit_polarity_4h
+      - reddit_volume_4h
+      - reddit_polarity_8h
+      - reddit_volume_8h
+      - reddit_polarity_12h
+      - reddit_volume_12h
+      - reddit_polarity_16h
+      - reddit_volume_16h
+      - reddit_polarity_20h
+      - reddit_volume_20h
