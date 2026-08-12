@@ -15,13 +15,26 @@ planned but never implemented.
 
 ## 2. Sources
 
-| # | Source | Connector | Auth | Historical coverage | Role |
+| # | Source | Fetched in | Auth | Historical coverage | Role |
 |---|---|---|---|---|---|
-| 1 | Yahoo Finance — NDX + DXY | `src/data/sources/yahoo_macro.py` (`yfinance`) | none | 2016+ | Macro liquidity context |
-| 2 | Alternative.me Fear & Greed Index | `src/data/sources/fear_greed.py` (REST JSON, `?limit=0`) | none | Feb 2018+ | Market sentiment (fear/greed) |
-| 3 | Binance Futures public API — BTCUSDT funding rate | `src/data/sources/funding_rates.py` | none | Sept 2019+ | Derivatives leverage pressure |
-| 4a | Google Trends — "Bitcoin" search interest | `src/data/sources/google_trends.py` (`pytrends`) | none | 2016+ | Retail attention proxy (long history) |
-| 4b | Reddit r/Bitcoin + r/CryptoCurrency | `src/data/sources/reddit_sentiment.py` (`praw` + `vaderSentiment`) | Reddit app (client_id/secret) | ~last 12 months only (standard API limit) | Textual social polarity + volume (recent period) |
+| 1 | Yahoo Finance — NDX + DXY | `notebooks/exogenous_data_ingestion.ipynb` (`yfinance`) | none | 2016+ | Macro liquidity context |
+| 2 | Alternative.me Fear & Greed Index | `notebooks/exogenous_data_ingestion.ipynb` (REST JSON, `?limit=0`) | none | Feb 2018+ | Market sentiment (fear/greed) |
+| 3 | Binance Futures public API — BTCUSDT funding rate | `notebooks/exogenous_data_ingestion.ipynb` | none | Sept 2019+ | Derivatives leverage pressure |
+| 4a | Google Trends — "Bitcoin" search interest | `notebooks/exogenous_data_ingestion.ipynb` (`pytrends`) | none | 2016+ (native), weekly resolution beyond ~9 months back | Retail attention proxy (long history) |
+| 4b | Reddit r/Bitcoin + r/CryptoCurrency | `notebooks/exogenous_data_ingestion.ipynb` (`praw` + `vaderSentiment`) | Reddit app (client_id/secret) | top posts of the last 12 months (`time_filter='year'`), biased toward high-engagement posts | Textual social polarity + volume (recent period) |
+
+**Implementation note (revised 2026-08-12):** the project's actual working
+pattern is notebook-driven — `notebooks/01_data_exploration.ipynb` and
+`notebooks/02_feature_analysis.ipynb` already fetch, clean, normalize, and
+engineer features for BTC directly in cells, saving intermediate CSVs to
+`data/raw/` and `data/processed/`. The `src/data/*.py` modules are empty
+scaffolding not currently wired into the real pipeline. Per user direction,
+this feature follows the existing convention: a new
+`notebooks/exogenous_data_ingestion.ipynb` fetches and merges all four
+exogenous sources into `data/raw/exogenous_merged.csv`, and
+`notebooks/02_feature_analysis.ipynb` is extended to merge that file in
+before the final feature-engineered export. No new `src/data/sources/`
+package is created for this round.
 
 **Ticker correction:** "Nasdaq Composite" is `^IXIC` on Yahoo Finance, not `^NDX`
 (Nasdaq-100). Use `^IXIC`. DXY uses `DX-Y.NYB`.
@@ -49,9 +62,9 @@ src/data/merger.py     (left-join all sources onto the BTC date index)
 data/raw/exogenous_merged.csv
    │
    ▼
-src/data/feature_engineer.py
-   (existing technical indicators + exogenous columns + one `<feature>_missing`
-    binary flag per exogenous feature)
+notebooks/02_feature_analysis.ipynb
+   (existing technical indicators + exogenous columns merged in + one
+    `<feature>_missing` binary flag per exogenous feature)
    │
    ▼
 data/processed/feature_engineered_data.csv
@@ -59,6 +72,10 @@ data/processed/feature_engineered_data.csv
    ▼
 src/data/splitter.py   (unchanged — chronological train/val/test split)
 ```
+
+All new fetch/merge logic lives in notebook cells, consistent with how
+`01_data_exploration.ipynb` and `02_feature_analysis.ipynb` already produce
+every existing processed CSV in this repo.
 
 ## 4. Missing-history handling
 
@@ -89,25 +106,33 @@ Rationale:
 
 ## 6. Error handling
 
-Each connector wraps its fetch in try/except and fails independently — one API
-being down (e.g. pytrends rate-limiting with a 429) must not break the whole
-pipeline. `merger.py` treats a missing/stale raw CSV as "source unavailable for
-this run": it logs a warning, reuses the last successfully fetched CSV on disk,
-and proceeds with the other sources.
+Each fetch cell in `exogenous_data_ingestion.ipynb` wraps its API call in
+try/except and fails independently — one API being down (e.g. pytrends
+rate-limiting with a 429) must not stop the other fetch cells from running.
+The merge cell treats a missing/empty raw CSV as "source unavailable for this
+run": it prints a warning, reuses the last successfully fetched CSV already on
+disk if present, and proceeds with the other sources rather than raising.
 
 ## 7. Testing
 
-- One unit test per connector, with a mocked API response, asserting output
-  columns, `Date` index dtype, and value ranges.
-- One test for `merger.py` with a fixture where one source's CSV is deliberately
-  absent, asserting the joined output has `NaN` + the `_missing` flag set for
-  that source's columns, and other sources are unaffected.
-- One non-regression test: after adding exogenous sources, the existing technical
-  indicator columns (`EMA_Signal`, `RSI_14`, `RSI_7`, `Volatility_14`,
-  `Volatility_30`, etc.) must be byte-for-byte identical to the current
-  `feature_engineered_data.csv` output for the same input — the point is to
-  *add* features, not silently change the ones the current registered model
-  (`models/registry/v1/`) was trained on.
+Consistent with the project's existing notebook-driven pattern (no pytest
+suite currently exercises the real pipeline — `tests/unit/test_*.py` are empty
+stubs), verification happens via assertions inside the notebook plus one
+standalone non-regression script:
+
+- Each fetch cell in `exogenous_data_ingestion.ipynb` is followed by an
+  assertion cell checking output shape, column names, `Date` dtype, and value
+  ranges (e.g. Fear & Greed in [0, 100], funding rate as a small float).
+- The merge cell's assertion checks that every exogenous column has a matching
+  `_missing` flag column, and that rows before a source's known start date
+  (e.g. before 2018-02-01 for Fear & Greed) are flagged `1`.
+- One non-regression check, run via `jupyter nbconvert --execute`: after
+  wiring the merge into `02_feature_analysis.ipynb`, the existing technical
+  indicator columns (`EMA_Signal`, `Price_to_EMA12/26/50`, `RSI_14`, `RSI_7`,
+  `RSI_Overbought`, `RSI_Oversold`, `Volatility_14`, `Volatility_30`) must be
+  byte-for-byte identical to the current `feature_engineered_data.csv` output
+  — the point is to *add* features, not silently change the ones the current
+  registered model (`models/registry/v1/`) was trained on.
 
 ## 8. Out of scope (for this spec)
 
