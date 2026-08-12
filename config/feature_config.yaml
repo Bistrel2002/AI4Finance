@@ -1,0 +1,61 @@
+# Feature Engineering Configuration
+# Details the active features, excluded features, and indicator parameters
+
+# Technical Indicator Parameters
+indicators:
+  ema:
+    fast_period: 12
+    slow_period: 26
+    signal_period: 50
+  rsi:
+    periods: [7, 14]
+    overbought_threshold: 70
+    oversold_threshold: 30
+  volatility:
+    windows: [14, 30]
+
+# Feature Groups and Active Columns
+features:
+  core_price:
+    - Open
+    - High
+    - Low
+    - Close
+    - Volume
+  trend:
+    - EMA_Signal
+    - Price_to_EMA12
+    - Price_to_EMA26
+    - Price_to_EMA50
+  momentum:
+    - RSI_14
+    - RSI_7
+    - RSI_Overbought
+    - RSI_Oversold
+  volatility:
+    - Volatility_14
+    - Volatility_30
+
+# Excluded Redundant Columns (systematically dropped to prevent multicollinearity/overfitting)
+excluded_features:
+  reason: "Dropped absolute prices/indicators and redundant dummy variables to avoid high collinearity and look-ahead bias."
+  columns:
+    - EMA_12
+    - EMA_26
+    - EMA_50
+    - RSI_Neutral
+
+# Optional Advanced Integration (Exogenous Features roadmap)
+exogenous_features:
+  macroeconomic:
+    enabled: true
+    indicators: [DXY_Close, NDX_Close]
+  on_chain:
+    enabled: false
+    metrics: [hash_rate, active_addresses, transaction_volume, exchange_flows]
+  derivatives:
+    enabled: true
+    metrics: [funding_rate, fear_greed_value]
+  social_sentiment:
+    enabled: true
+    metrics: [google_trends_score, reddit_polarity, reddit_volume]
