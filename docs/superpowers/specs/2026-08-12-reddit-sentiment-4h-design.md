@@ -14,7 +14,7 @@ The exogenous-data-sources feature (already merged to `main`) shipped with `redd
 [Arctic Shift](https://github.com/ArthurHeitmann/arctic_shift) republishes the old Pushshift Reddit archive and keeps it updated. Verified directly (test queries run during design): its public API at `https://arctic-shift.photon-reddit.com/api/posts/search` requires no key, no auth, and supports `subreddit`, `after`, `before`, and `limit` query parameters, returning real post objects (`title`, `selftext`, `score`, `created_utc`, `num_comments`, `author`, `subreddit`). This avoids BitTorrent entirely (no client is installed or reasonably installable in the execution environment) and avoids downloading the multi-year, all-subreddit dump files that a torrent-based approach would require.
 
 - **Subreddit:** `Bitcoin`
-- **Date range:** 2020-01-01 to present
+- **Date range:** 2020-01-01 to 2026-05-26 (matches `test_end` in `config/settings.yaml` — the last date any split actually uses; fetching beyond it would collect data no split ever reads)
 - **Auth:** none
 - **Rate limits:** unknown/undocumented publicly — fetch cell paginates conservatively (one HTTP request per time window) with a short sleep between requests, matching the defensive pattern already used for Binance's funding-rate pagination.
 
@@ -41,8 +41,8 @@ reddit_polarity_20h, reddit_volume_20h
 
 Two distinct "missing" cases, following the project's established rule of never fabricating a value:
 
-- **`reddit_volume_Xh`**: a real `0` is a valid measurement (no posts in that 4h window — that itself is signal). `NaN` + `reddit_volume_Xh_missing=1` only for days before 2020-01-01 (before this data collection starts) or after the most recent successful fetch (source not yet queried for that day).
-- **`reddit_polarity_Xh`**: `NaN` + `reddit_polarity_Xh_missing=1` whenever `reddit_volume_Xh == 0` (polarity is mathematically undefined with zero posts — averaging nothing is not "neutral," so this must not be imputed as 0) OR the day is outside the fetch range (same pre-2020/not-yet-fetched cases as volume).
+- **`reddit_volume_Xh`**: a real `0` is a valid measurement (no posts in that 4h window — that itself is signal). `NaN` + `reddit_volume_Xh_missing=1` only for days outside the fetch range (before 2020-01-01 or after 2026-05-26).
+- **`reddit_polarity_Xh`**: `NaN` + `reddit_polarity_Xh_missing=1` whenever `reddit_volume_Xh == 0` (polarity is mathematically undefined with zero posts — averaging nothing is not "neutral," so this must not be imputed as 0) OR the day is outside the fetch range (same before-2020/after-2026-05-26 cases as volume).
 
 ## 6. Where this plugs in
 
