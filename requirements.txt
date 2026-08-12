@@ -7,3 +7,9 @@ plotly
 seaborn
 streamlit
 xgboost
+graphifyy
+requests
+pytrends
+praw
+python-dotenv
+vaderSentiment
